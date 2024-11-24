@@ -1,9 +1,10 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
 from lark import Lark, Transformer, Tree
+import ply.lex as lex
 
 app = Flask(__name__)
 
-# Definición de la gramática para manejar n números con soporte para decimales
+# Configuración de gramática
 grammar = """
     ?start: expr
     ?expr: expr "+" term   -> add
@@ -15,7 +16,6 @@ grammar = """
     ?factor: "(" expr ")"
            | NUMBER           -> number
 
-    %import common.CNAME
     %import common.NUMBER
     %import common.WS
     %ignore WS
@@ -33,43 +33,96 @@ class CalculateTree(Transformer):
     def number(self, args):
         return float(args[0])
 
-# Configuración del parser
 parser = Lark(grammar, parser='lalr', transformer=CalculateTree())
 
-# Función para construir el árbol de análisis sin evaluar la expresión
-def get_parse_tree(expression):
-    raw_tree = Lark(grammar, parser='lalr').parse(expression)  # Genera el árbol sin transformar
-    return transform_tree_to_spanish(raw_tree)
+# Definición de tokens
+tokens = (
+    'NUMERO',
+    'SUMA',
+    'RESTA',
+    'MULTIPLICACION',
+    'DIVISION',
+    'LPAREN',
+    'RPAREN'
+)
 
-# Función para transformar el árbol a términos en español
-def transform_tree_to_spanish(tree):
-    tree_str = tree.pretty()
-    translations = {
-        "add": "suma",
-        "sub": "resta",
-        "mul": "multiplicación",
-        "div": "división",
-        "number": "número"
-    }
-    for eng, esp in translations.items():
-        tree_str = tree_str.replace(eng, esp)
-    return tree_str
+t_SUMA = r'\+'
+t_RESTA = r'-'
+t_MULTIPLICACION = r'\*'
+t_DIVISION = r'/'
+t_LPAREN = r'\('
+t_RPAREN = r'\)'
+
+def t_NUMERO(t):
+    r'\d+(\.\d+)?'
+    t.value = float(t.value) if '.' in t.value else int(t.value)
+    return t
+
+t_ignore = ' \t'
+
+def t_error(t):
+    raise ValueError(f"Token inválido: {t.value[0]}")
+
+lexer = lex.lex()
+
+def analyze_tokens(expression):
+    lexer.input(expression)
+    tokens_list = []
+    total_numbers = 0
+    total_operators = 0
+    total_integers = 0
+    total_decimals = 0
+
+    for token in lexer:
+        tokens_list.append(token)
+        if token.type == 'NUMERO':
+            total_numbers += 1
+            if isinstance(token.value, int):
+                total_integers += 1
+            else:
+                total_decimals += 1
+        elif token.type in {'SUMA', 'RESTA', 'MULTIPLICACION', 'DIVISION'}:
+            total_operators += 1
+
+    return tokens_list, total_numbers, total_operators, total_integers, total_decimals
+
+def generate_html_tree(tree):
+    def build_html(tree):
+        if isinstance(tree, Tree):
+            children = "".join([build_html(child) for child in tree.children])
+            return f"<li>{tree.data}<ul>{children}</ul></li>"
+        else:
+            return f"<li>{tree}</li>"
+
+    return f"<ul>{build_html(tree)}</ul>"
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    result = None
-    parse_tree = None
     if request.method == 'POST':
-        expression = request.form.get('expression')
+        expression = request.json.get('expression')
         try:
-            # Construir el árbol de análisis
-            parse_tree = get_parse_tree(expression)
-            # Evaluar la expresión usando el transformer
+            tokens_list, total_numbers, total_operators, total_integers, total_decimals = analyze_tokens(expression)
+            parse_tree = Lark(grammar, parser='lalr').parse(expression)
             result = parser.parse(expression)
+            tree_html = generate_html_tree(parse_tree)
+
+            # Guardar en archivo de texto
+            with open("resultados.txt", "a") as f:
+                f.write(f"Expresión: {expression}, Resultado: {result}\n")
+
+            return jsonify({
+                "result": result,
+                "tokens": [{"tipo": t.type, "valor": t.value} for t in tokens_list],
+                "total_tokens": total_numbers + total_operators,
+                "total_numeros": total_numbers,
+                "total_enteros": total_integers,
+                "total_decimales": total_decimals,
+                "total_operadores": total_operators,
+                "tree_html": tree_html
+            })
         except Exception as e:
-            result = f"Error: {e}"
-            parse_tree = "No se pudo construir el árbol debido a un error."
-    return render_template('index.html', result=result, parse_tree=parse_tree)
+            return jsonify({"error": str(e)}), 400
+    return render_template('index.html')
 
 if __name__ == '__main__':
     app.run(debug=True)

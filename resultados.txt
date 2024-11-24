@@ -1,0 +1,2 @@
+Expresión: 2+2-6.9*6, Resultado: -37.400000000000006
+Expresión: 1+3-6.9*3, Resultado: -16.700000000000003

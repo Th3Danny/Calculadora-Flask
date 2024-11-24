@@ -3,79 +3,127 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calculadora con Árbol CFG</title>
+    <title>Calculadora con Árbol</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #f4f4f4;
-        }
-        .calculator-container {
-            background: #ffffff;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            padding: 20px;
-            max-width: 400px;
-            width: 100%;
-        }
-        h1 {
-            text-align: center;
-            color: #333;
-        }
-        form {
-            display: flex;
             flex-direction: column;
+            align-items: center;
+            margin: 20px;
+        }
+        .calculator {
+            display: grid;
+            grid-template-columns: repeat(4, 60px);
             gap: 10px;
         }
-        input[type="text"] {
+        button, input {
+            font-size: 18px;
             padding: 10px;
+        }
+        input {
+            grid-column: span 4;
+        }
+        table {
+            margin-top: 20px;
+            border-collapse: collapse;
+            width: 80%;
+        }
+        th, td {
             border: 1px solid #ccc;
-            border-radius: 4px;
-            font-size: 16px;
-        }
-        button {
-            padding: 10px;
-            border: none;
-            border-radius: 4px;
-            background-color: #007bff;
-            color: white;
-            font-size: 16px;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #0056b3;
-        }
-        .result, .tree {
-            margin-top: 15px;
-            font-size: 16px;
+            padding: 8px;
             text-align: center;
         }
-        .tree {
-            white-space: pre-wrap;
-            text-align: left;
+        ul {
+            list-style-type: none;
+        }
+        ul ul {
+            margin-left: 20px;
+        }
+        li {
+            margin: 5px 0;
         }
     </style>
 </head>
 <body>
-    <div class="calculator-container">
-        <h1>Calculadora con Árbol Flask</h1>
-        <form method="POST">
-            <input type="text" name="expression" placeholder="Introduce tu expresión" required>
-            <button type="submit">Calcular</button>
-        </form>
-        {% if result is not none %}
-            <div class="result">Resultado: {{ result }}</div>
-        {% endif %}
-        {% if parse_tree is not none %}
-            <div class="tree">
-                <h3>Árbol de Análisis:</h3>
-                <pre>{{ parse_tree }}</pre>
-            </div>
-        {% endif %}
+    <h1>Calculadora con Árbol</h1>
+    <input type="text" id="expression" readonly>
+    <div class="calculator">
+        <button onclick="appendValue('1')">1</button>
+        <button onclick="appendValue('2')">2</button>
+        <button onclick="appendValue('3')">3</button>
+        <button onclick="appendValue('+')">+</button>
+        <button onclick="appendValue('4')">4</button>
+        <button onclick="appendValue('5')">5</button>
+        <button onclick="appendValue('6')">6</button>
+        <button onclick="appendValue('-')">-</button>
+        <button onclick="appendValue('7')">7</button>
+        <button onclick="appendValue('8')">8</button>
+        <button onclick="appendValue('9')">9</button>
+        <button onclick="appendValue('*')">*</button>
+        <button onclick="deleteLast()">←</button>
+        <button onclick="appendValue('0')">0</button>
+        <button onclick="appendValue('.')">.</button>
+        <button onclick="appendValue('/')">/</button>
+        <button onclick="calculate()">=</button>
     </div>
+    <div id="result"></div>
+    
+    <h3>Tokens</h3>
+    <table id="tokens-table"></table>
+    
+    <h3>Estadísticas</h3>
+    <table id="stats-table"></table>
+    
+    <h3>Árbol de Análisis</h3>
+    <div id="tree"></div>
+
+    <script>
+        function appendValue(value) {
+            document.getElementById("expression").value += value;
+        }
+
+        function deleteLast() {
+            const input = document.getElementById("expression");
+            input.value = input.value.slice(0, -1);
+        }
+
+        function calculate() {
+            const expression = document.getElementById("expression").value;
+            fetch("/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ expression }),
+            })
+                .then((response) => response.json())
+                .then((data) => {
+                    if (data.error) {
+                        document.getElementById("result").innerText = "Error: " + data.error;
+                    } else {
+                        document.getElementById("result").innerText = "Resultado: " + data.result;
+
+                        // Mostrar tokens en tabla
+                        const tokensTable = document.getElementById("tokens-table");
+                        tokensTable.innerHTML = "<tr><th>Tipo</th><th>Valor</th></tr>";
+                        data.tokens.forEach(token => {
+                            tokensTable.innerHTML += `<tr><td>${token.tipo}</td><td>${token.valor}</td></tr>`;
+                        });
+
+                        // Mostrar estadísticas
+                        const statsTable = document.getElementById("stats-table");
+                        statsTable.innerHTML = `
+                            <tr><td>Total de tokens:</td><td>${data.total_tokens}</td></tr>
+                            <tr><td>Total de números:</td><td>${data.total_numeros}</td></tr>
+                            <tr><td>Total de enteros:</td><td>${data.total_enteros}</td></tr>
+                            <tr><td>Total de decimales:</td><td>${data.total_decimales}</td></tr>
+                            <tr><td>Total de operadores:</td><td>${data.total_operadores}</td></tr>
+                        `;
+
+                        // Mostrar árbol en HTML
+                        document.getElementById("tree").innerHTML = data.tree_html;
+                    }
+                });
+        }
+    </script>
 </body>
 </html>
