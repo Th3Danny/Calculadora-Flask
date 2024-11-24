@@ -4,7 +4,6 @@ import ply.lex as lex
 
 app = Flask(__name__)
 
-# Configuración de gramática
 grammar = """
     ?start: expr
     ?expr: expr "+" term   -> add
@@ -35,7 +34,6 @@ class CalculateTree(Transformer):
 
 parser = Lark(grammar, parser='lalr', transformer=CalculateTree())
 
-# Definición de tokens
 tokens = (
     'NUMERO',
     'SUMA',
@@ -86,15 +84,23 @@ def analyze_tokens(expression):
 
     return tokens_list, total_numbers, total_operators, total_integers, total_decimals
 
-def generate_html_tree(tree):
-    def build_html(tree):
-        if isinstance(tree, Tree):
-            children = "".join([build_html(child) for child in tree.children])
-            return f"<li>{tree.data}<ul>{children}</ul></li>"
-        else:
-            return f"<li>{tree}</li>"
+def generate_tree_json(tree):
+    """Convierte el árbol de Lark a un formato JSON jerárquico y traduce los nombres al español."""
+    translations = {
+        "add": "suma",
+        "sub": "resta",
+        "mul": "multiplicación",
+        "div": "división",
+        "number": "número"
+    }
+    if isinstance(tree, Tree):
+        return {
+            "name": translations.get(tree.data, tree.data),
+            "children": [generate_tree_json(child) for child in tree.children]
+        }
+    else:
+        return {"name": str(tree)}
 
-    return f"<ul>{build_html(tree)}</ul>"
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -104,11 +110,7 @@ def index():
             tokens_list, total_numbers, total_operators, total_integers, total_decimals = analyze_tokens(expression)
             parse_tree = Lark(grammar, parser='lalr').parse(expression)
             result = parser.parse(expression)
-            tree_html = generate_html_tree(parse_tree)
-
-            # Guardar en archivo de texto
-            with open("resultados.txt", "a") as f:
-                f.write(f"Expresión: {expression}, Resultado: {result}\n")
+            tree_json = generate_tree_json(parse_tree)
 
             return jsonify({
                 "result": result,
@@ -118,11 +120,12 @@ def index():
                 "total_enteros": total_integers,
                 "total_decimales": total_decimals,
                 "total_operadores": total_operators,
-                "tree_html": tree_html
+                "tree_json": tree_json
             })
         except Exception as e:
             return jsonify({"error": str(e)}), 400
     return render_template('index.html')
+
 
 if __name__ == '__main__':
     app.run(debug=True)
