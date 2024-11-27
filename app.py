@@ -4,6 +4,7 @@ import ply.lex as lex
 
 app = Flask(__name__)
 
+# Gramática ajustada
 grammar = """
     ?start: expr
     ?expr: expr "+" term   -> add
@@ -12,7 +13,8 @@ grammar = """
     ?term: term "*" factor  -> mul
          | term "/" factor  -> div
          | factor
-    ?factor: "(" expr ")"
+    ?factor: "-" factor     -> neg
+           | "(" expr ")"
            | NUMBER           -> number
 
     %import common.NUMBER
@@ -29,6 +31,8 @@ class CalculateTree(Transformer):
         return args[0] * args[1]
     def div(self, args):
         return args[0] / args[1]
+    def neg(self, args):
+        return -args[0]
     def number(self, args):
         return float(args[0])
 
@@ -91,6 +95,7 @@ def generate_tree_json(tree):
         "sub": "resta",
         "mul": "multiplicación",
         "div": "división",
+        "neg": "negativo",
         "number": "número"
     }
     if isinstance(tree, Tree):
@@ -100,7 +105,6 @@ def generate_tree_json(tree):
         }
     else:
         return {"name": str(tree)}
-
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -125,7 +129,6 @@ def index():
         except Exception as e:
             return jsonify({"error": str(e)}), 400
     return render_template('index.html')
-
 
 if __name__ == '__main__':
     app.run(debug=True)
